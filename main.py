@@ -4,28 +4,26 @@ import os
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
-def test_connessione():
-    if not TOKEN or not CHAT_ID:
-        print("❌ ERRORE: Token o Chat ID mancanti nelle Secrets di GitHub!")
+def debug_bot():
+    print("--- INIZIO DEBUG ---")
+    # Verifichiamo se le variabili esistono
+    if not TOKEN: 
+        print("ERRORE: La Secret TELEGRAM_TOKEN è vuota!")
+        return
+    if not CHAT_ID:
+        print("ERRORE: La Secret TELEGRAM_CHAT_ID è vuota!")
         return
 
-    print(f"Tentativo di invio a: {CHAT_ID}")
+    # Stampiamo solo i primi e ultimi caratteri per sicurezza
+    print(f"Token caricato: {TOKEN[:5]}...{TOKEN[-5:]}")
+    print(f"Chat ID caricato: {CHAT_ID}")
+
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-    payload = {
-        "chat_id": CHAT_ID,
-        "text": "🎯 **i KILLER TEST** 🎯\nSe leggi questo, il bot è configurato correttamente!"
-    }
+    payload = {"chat_id": CHAT_ID, "text": "Test Finale i Killer"}
     
-    try:
-        r = requests.post(url, json=payload)
-        risultato = r.json()
-        if risultato.get("ok"):
-            print("✅ SUCCESSO! Il messaggio è arrivato su Telegram.")
-        else:
-            print(f"❌ ERRORE DA TELEGRAM: {risultato.get('description')}")
-            print(f"Codice errore: {risultato.get('error_code')}")
-    except Exception as e:
-        print(f"❌ ERRORE DI RETE: {e}")
+    r = requests.post(url, json=payload)
+    print(f"Risposta completa di Telegram: {r.text}")
+    print("--- FINE DEBUG ---")
 
 if __name__ == "__main__":
-    test_connessione()
+    debug_bot()
