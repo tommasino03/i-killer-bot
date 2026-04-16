@@ -4,26 +4,14 @@ import os
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
-def debug_bot():
-    print("--- INIZIO DEBUG ---")
-    # Verifichiamo se le variabili esistono
-    if not TOKEN: 
-        print("ERRORE: La Secret TELEGRAM_TOKEN è vuota!")
-        return
-    if not CHAT_ID:
-        print("ERRORE: La Secret TELEGRAM_CHAT_ID è vuota!")
-        return
-
-    # Stampiamo solo i primi e ultimi caratteri per sicurezza
-    print(f"Token caricato: {TOKEN[:5]}...{TOKEN[-5:]}")
-    print(f"Chat ID caricato: {CHAT_ID}")
-
-    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-    payload = {"chat_id": CHAT_ID, "text": "Test Finale i Killer"}
+def invio_ignorante():
+    print(f"Sto provando a inviare a: {CHAT_ID}")
+    # Metodo ultra-compatibile: parametri diretti nell'URL
+    testo = "SISTEMA ONLINE - I KILLER SONO PRONTI"
+    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage?chat_id={CHAT_ID}&text={testo}"
     
-    r = requests.post(url, json=payload)
-    print(f"Risposta completa di Telegram: {r.text}")
-    print("--- FINE DEBUG ---")
+    r = requests.get(url) # Usiamo GET invece di POST
+    print(f"Risposta Telegram: {r.text}")
 
 if __name__ == "__main__":
-    debug_bot()
+    invio_ignorante()
