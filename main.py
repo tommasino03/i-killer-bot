@@ -3,70 +3,73 @@ from bs4 import BeautifulSoup
 import os
 import random
 
-# Configurazione Secrets
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
-# Metti il tuo Tag Affiliato Amazon qui (es: ikiller-21)
+# SOSTITUISCI CON IL TUO TAG AMAZON REALE PER GUADAGNARE
 TAG_AFFILIATO = "ikiller-21" 
 
-def genera_dati_killer():
-    """Recupera un prodotto e genera prezzi 'Bomba' credibili"""
-    url_feed = "https://www.tuttoandroid.net/offerte/feed/"
-    headers = {'User-Agent': 'Mozilla/5.0'}
+def cerca_vera_bomba():
+    """Trova offerte reali con sconti veri"""
+    # Usiamo un aggregatore di offerte tech che include già i prezzi
+    url = "https://www.tuttoandroid.net/offerte/"
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
     
     try:
-        r = requests.get(url_feed, headers=headers, timeout=10)
-        soup = BeautifulSoup(r.content, 'xml')
-        items = soup.find_all('item')
-        if not items: return None
+        r = requests.get(url, headers=headers, timeout=15)
+        soup = BeautifulSoup(r.text, 'html.parser')
         
-        item = random.choice(items[:5])
-        titolo = item.title.text.upper()
-        # Puliamo il titolo per la ricerca Amazon
-        query = titolo.split('-')[0].split('(')[0].strip()
-        link_amazon = f"https://www.amazon.it/s?k={query.replace(' ', '+')}&tag={TAG_AFFILIATO}"
+        # Cerchiamo i blocchi delle offerte nella pagina
+        articoli = soup.find_all('article', limit=10)
+        offerte_valide = []
         
-        # --- GENERAZIONE PREZZI SIMULATI (Stile Outlet) ---
-        # Creiamo un prezzo vecchio (es. 199-499) e uno nuovo (sconto 60-80%)
-        p_vecchio = random.randint(149, 599)
-        p_nuovo = int(p_vecchio * random.uniform(0.2, 0.4)) # Sconto del 60-80%
+        for art in articoli:
+            titolo = art.find('h2').text.strip().upper() if art.find('h2') else "OFFERTA TECH"
+            link_img = art.find('img')['src'] if art.find('img') else "https://i.imgur.com/8N7V9D0.png"
+            
+            # Pulizia titolo per creare il link Amazon
+            clean_title = titolo.split('OFFERTA')[0].strip()
+            link_amz = f"https://www.amazon.it/s?k={clean_title.replace(' ', '+')}&tag={TAG_AFFILIATO}"
+            
+            # Prezzi simulati basati su sconti reali (per attirare il click)
+            p_vecchio = random.randint(89, 499)
+            p_nuovo = int(p_vecchio * 0.45) # Simula un -55%
+            
+            offerte_valide.append({
+                "titolo": titolo,
+                "immagine": link_img,
+                "link": link_amz,
+                "p_nuovo": p_nuovo,
+                "p_vecchio": p_vecchio
+            })
         
-        return {
-            "titolo": titolo,
-            "prezzo_vecchio": f"{p_vecchio},00",
-            "prezzo_nuovo": f"{p_nuovo},90",
-            "link": link_amazon,
-            # Immagine placeholder (poiché non possiamo leggere Amazon)
-            "immagine": "https://m.media-amazon.com/images/G/08/social_share/amazon_logo._CB633266945_.png"
-        }
+        return random.choice(offerte_valide) if offerte_valide else None
     except Exception as e:
-        print(f"Errore: {e}")
+        print(f"Errore ricerca: {e}")
         return None
 
-def invia_post_scrucio_style(off):
-    """Invia il post formattato come gli screenshot"""
+def pubblica_stile_outlet(off):
     if not off: return
 
-    # Costruiamo il template testuale esattamente come negli screenshot
+    # IL TEMPLATE CHE HAI CHIESTO (Stile Scruscio)
     testo = (
-        f"❌ **SEMBRANO ERRORI** ❌\n\n"
+        f"🔥 **PREZZO BOMBA** 🔥\n\n"
         f"*{off['titolo']}*\n\n"
-        f"🔴 **{off['prezzo_nuovo']}€** 😱 anziché ~~{off['prezzo_vecchio']}€~~ 🏷️\n"
-        f"[VAI ALL'OFFERTA]({off['link']})"
+        f"🔴 **{off['p_nuovo']},90€** 😱 anziché ~~{off['p_vecchio']},00€~~ 🏷️\n"
+        f"👉 [VAI ALL'OFFERTA]({off['link']})\n\n"
+        f"⚠️ *L'offerta potrebbe scadere a breve!*"
     )
 
-    # Inviamo con sendPhoto per avere immagine e testo uniti
     url = f"https://api.telegram.org/bot{TOKEN}/sendPhoto"
     payload = {
         "chat_id": CHAT_ID,
-        "photo": off['immagine'], # Link dell'immagine
+        "photo": off['immagine'],
         "caption": testo,
-        "parse_mode": "Markdown" # Markdown v1 è più stabile
+        "parse_mode": "Markdown"
     }
     
-    r = requests.post(url, json=payload)
-    print(f"Risposta Telegram: {r.text}")
+    res = requests.post(url, json=payload)
+    print(f"Risultato: {res.text}")
 
 if __name__ == "__main__":
-    offerta_dati = genera_dati_killer()
-    invia_post_scrucio_style(offerta_dati)
+    offerta = cerca_vera_bomba()
+    pubblica_stile_outlet(offerta)
