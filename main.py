@@ -2,61 +2,71 @@ import requests
 from bs4 import BeautifulSoup
 import os
 import re
+import random
 
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 TAG_AMZ = "ikiller-21" 
 
-def scova_offerte_vere():
-    # Fonte ad alta frequenza di errori di prezzo e minimi storici
-    url = "https://www.hdblog.it/offerte/"
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+# Lista di fonti affidabili per errori di prezzo e sconti tech
+FONTI = [
+    "https://www.hdblog.it/offerte/",
+    "https://www.tuttoandroid.net/offerte/",
+    "https://www.smartworld.it/offerte"
+]
+
+def estrai_prezzi(testo):
+    """Estrae tutti i prezzi da un testo e restituisce il più basso e il più alto"""
+    prezzi = re.findall(r'(\d+[\.,]\d{2})', testo)
+    if not prezzi:
+        prezzi = re.findall(r'(\d+)', testo) # Fallback per numeri senza decimali
     
-    try:
-        r = requests.get(url, headers=headers, timeout=15)
-        soup = BeautifulSoup(r.text, 'html.parser')
-        
-        # Prende l'ultima offerta pubblicata (la più calda)
-        offerta = soup.find('div', class_='col-m-75') # Classe specifica per le news offerte
-        if not offerta:
-            # Fallback su un altro selettore se il sito cambia layout
-            offerta = soup.find('a', class_='title')
-            
-        titolo_completo = offerta.text.strip()
-        link_approfondimento = "https://www.hdblog.it" + offerta.find_parent('a')['href']
-        
-        # ESTRAZIONE PREZZO REALE (Cerca il pattern "X € invece di Y €")
-        # Cerchiamo cifre seguite da €
-        prezzi = re.findall(r'(\d+[\.,]?\d*)\s*€', titolo_completo)
-        
-        if len(prezzi) >= 1:
-            prezzo_nuovo = prezzi[0]
-            # Se trova un secondo prezzo, è quello originale, altrimenti lo stima (+30%)
-            prezzo_vecchio = prezzi[1] if len(prezzi) > 1 else str(int(float(prezzo_nuovo.replace(',', '.')) * 1.4))
-            
-            prodotto = titolo_completo.split('€')[0].replace('OFFERTA', '').strip()
-            link_diretto = f"https://www.amazon.it/s?k={prodotto[:30].replace(' ', '+')}&tag={TAG_AMZ}"
-            
-            return {
-                "titolo": prodotto.upper(),
-                "nuovo": prezzo_nuovo,
-                "vecchio": prezzo_vecchio,
-                "link": link_diretto
-            }
-    except Exception as e:
-        print(f"Errore ricerca: {e}")
-    return None
+    numeri = sorted([float(p.replace(',', '.')) for p in prezzi if float(p.replace(',', '.')) > 5])
+    
+    if len(numeri) >= 2:
+        return f"{numeri[0]:.2f}", f"{numeri[-1]:.2f}"
+    elif len(numeri) == 1:
+        return f"{numeri[0]:.2f}", f"{numeri[0]*1.4:.0f}" # Simula prezzo originale
+    return None, None
 
-def invia_post_bomba(off):
-    if not off: return
+def scansiona_web():
+    offerte_scovate = []
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) iKillerBot/3.0'}
 
-    # IL LAYOUT CHE VOLEVI (Identico agli screenshot)
+    for url in FONTI:
+        try:
+            r = requests.get(url, headers=headers, timeout=10)
+            soup = BeautifulSoup(r.text, 'html.parser')
+            
+            # Cerca i titoli degli articoli (cambia in base al sito)
+            links = soup.find_all(['h2', 'h3', 'a'], limit=15)
+            
+            for l in links:
+                txt = l.text.strip().upper()
+                # Filtro "Bomba": pubblica solo se contiene parole forti o un prezzo
+                if any(x in txt for x in ["€", "OFFERTA", "MINIMO", "ERRORE", "SCONTO"]):
+                    p_nuovo, p_vecchio = estrai_prezzi(txt)
+                    
+                    if p_nuovo:
+                        prodotto = txt.split('€')[0].replace('OFFERTA', '').strip()
+                        offerte_scovate.append({
+                            "titolo": prodotto[:60],
+                            "nuovo": p_nuovo,
+                            "vecchio": p_vecchio,
+                            "link": f"https://www.amazon.it/s?k={prodotto[:30].replace(' ', '+')}&tag={TAG_AMZ}"
+                        })
+        except:
+            continue
+    return offerte_scovate
+
+def invia_killer_post(off):
+    # Template grafico identico ai canali top
     testo = (
-        f"🔴 **PREZZO BOMBA** 🔴\n\n"
-        f"*{off['titolo']}*\n\n"
-        f"💰 **{off['nuovo']}€** 😱 anziché ~~{off['vecchio']}€~~ 🏷️\n\n"
+        f"❌ **SEMBRANO ERRORI** ❌\n\n"
+        f"📦 **{off['titolo']}**\n\n"
+        f"🔴 **{off['nuovo']}€** 😱 anziché ~~{off['vecchio']}€~~ 🏷️\n\n"
         f"🛒 [VAI ALL'OFFERTA ORA]({off['link']})\n\n"
-        f"❌ **SEMBRANO ERRORI** ❌"
+        f"🔥 *PREZZO BOMBA RILEVATO* 🔥"
     )
 
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
@@ -64,13 +74,12 @@ def invia_post_bomba(off):
         "chat_id": CHAT_ID,
         "text": testo,
         "parse_mode": "Markdown",
-        "disable_web_page_preview": False # FONDAMENTALE: genera l'anteprima con la FOTO REALE del prodotto
+        "disable_web_page_preview": False # Genera la foto reale del prodotto
     }
-    
     requests.post(url, json=payload)
 
 if __name__ == "__main__":
-    dati = scova_offerte_vere()
-    invia_post_bomba(dati)
-               
-   
+    lista = scansiona_web()
+    if lista:
+        # Sceglie una delle migliori offerte trovate
+        invia_killer_post(random.choice(lista))
