@@ -2,81 +2,92 @@ import requests
 from bs4 import BeautifulSoup
 import os
 import re
-import json
+import random
 
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 TAG_AMZ = "ikiller-21" 
 
-# Fonti varie: Tech, Casa, Errori generici
-FONTI = [
-    "https://www.tuttotech.net/offerte/feed/",
-    "https://www.smartworld.it/offerte/feed",
-    "https://www.hdblog.it/offerte/feed/",
-    "https://www.punto-informatico.it/offerte/feed/"
-]
+def scansiona_offerte_top():
+    fonti = [
+        "https://www.tuttotech.net/offerte/feed/",
+        "https://www.smartworld.it/offerte/feed",
+        "https://www.hdblog.it/offerte/feed/"
+    ]
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+    offerte = []
 
-def invia_telegram(metodo, payload):
-    url = f"https://api.telegram.org/bot{TOKEN}/{metodo}"
-    return requests.post(url, json=payload)
-
-def scansiona_e_seleziona():
-    database = []
-    headers = {'User-Agent': 'Mozilla/5.0'}
-    
-    for url in FONTI:
+    for url in fonti:
         try:
             r = requests.get(url, headers=headers, timeout=10)
             soup = BeautifulSoup(r.content, 'xml')
             for item in soup.find_all('item')[:10]:
                 titolo = item.title.text
+                link_art = item.link.text
+                
+                # Cerchiamo il prezzo
                 prezzi = re.findall(r'(\d+[\.,]?\d*)\s*€', titolo)
                 if prezzi:
-                    p_nuovo = prezzi[0].replace(',', '.')
-                    # Calcoliamo uno sconto aggressivo visibile
-                    p_old = float(p_nuovo) * 1.5 
+                    p_nuovo = float(prezzi[0].replace(',', '.'))
+                    if p_nuovo < 20: continue # Filtro qualità
                     
+                    p_old = f"{p_nuovo * 1.5:.0f}"
+                    
+                    # Estrazione immagine dall'articolo (il tocco magico)
+                    img_url = "https://i.imgur.com/8N7V9D0.png" # Default
+                    try:
+                        r_img = requests.get(link_art, headers=headers, timeout=5)
+                        s_img = BeautifulSoup(r_img.text, 'html.parser')
+                        meta_img = s_img.find("meta", property="og:image")
+                        if meta_img: img_url = meta_img["content"]
+                    except: pass
+
                     clean_title = re.sub(r'OFFERTA|BOMBA|MINIMO|SCONTO|ERRORE', '', titolo, flags=re.I)
-                    clean_title = " ".join(clean_title.split()[:6]).upper()
+                    clean_title = " ".join(clean_title.split()[:7]).upper()
                     
-                    database.append({
-                        "id": clean_title, # Usato per la memoria
+                    link_final = f"https://www.amazon.it/s?k={clean_title.replace(' ', '+')}&tag={TAG_AMZ}"
+                    
+                    offerte.append({
                         "titolo": clean_title,
-                        "prezzo": p_nuovo,
-                        "prezzo_old": f"{p_old:.0f}",
-                        "link": f"https://www.amazon.it/s?k={clean_title.replace(' ', '+')}&tag={TAG_AMZ}"
+                        "nuovo": f"{p_nuovo:.2f}",
+                        "vecchio": p_old,
+                        "img": img_url,
+                        "link": link_final
                     })
         except: continue
-    return database
+    return offerte
+
+def pubblica_top(off):
+    # TEMPLATE IDENTICO AI CANALI TOP
+    testo = (
+        f"🔴 **PREZZO SHOCK** 🔴\n\n"
+        f"📦 **{off['titolo']}**\n\n"
+        f"💰 **{off['nuovo']}€** 😱 invece di ~~{off['vecchio']}€~~ 🏷️\n\n"
+        f"❌ **SEMBRANO ERRORI** ❌\n"
+        f"⚠️ *POCHI PEZZI DISPONIBILI!*"
+    )
+
+    # CREAZIONE BOTTONE INLINE
+    reply_markup = {
+        "inline_keyboard": [[
+            {"text": "🛒 VAI ALL'OFFERTA ORA", "url": off['link']}
+        ]]
+    }
+
+    # Invio della FOTO con didascalia e bottone
+    url = f"https://api.telegram.org/bot{TOKEN}/sendPhoto"
+    payload = {
+        "chat_id": CHAT_ID,
+        "photo": off['img'],
+        "caption": testo,
+        "parse_mode": "Markdown",
+        "reply_markup": reply_markup
+    }
+    
+    r = requests.post(url, json=payload)
+    print(f"Risultato: {r.text}")
 
 if __name__ == "__main__":
-    offerte = scansiona_e_seleziona()
-    
+    offerte = scansiona_offerte_top()
     if offerte:
-        # Scegliamo un'offerta a caso tra le migliori 5 per variare sempre il canale
-        scelta = random.choice(offerte[:5])
-        
-        testo = (
-            f"❌ **SEMBRANO ERRORI** ❌\n\n"
-            f"📦 **{scelta['titolo']}**\n\n"
-            f"🔴 **{scelta['prezzo']}€** 😱 invece di ~~{scelta['prezzo_old']}€~~ 🏷️\n\n"
-            f"🔥 *SCONTO SHOCK - SOLO POCHI PEZZI!*"
-        )
-        
-        # Creazione del BOTTONE PROFESSIONALE
-        markup = {
-            "inline_keyboard": [[
-                {"text": "🛒 ACQUISTA ORA", "url": scelta['link']}
-            ]]
-        }
-        
-        payload = {
-            "chat_id": CHAT_ID,
-            "text": testo,
-            "parse_mode": "Markdown",
-            "reply_markup": markup,
-            "disable_web_page_preview": False
-        }
-        
-        invia_telegram("sendMessage", payload)
-   
+        pubblica_top(random.choice(offerte))
